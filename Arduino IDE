@@ -1,0 +1,54 @@
+/*
+  Foresight - Markov Motion Predictor
+
+  Reads motion/no-motion state from an HC-SR501 PIR sensor
+  and sends the state to Python over Serial.
+
+  Project:
+  Foresight - Markov Chain Motion Predictor
+*/
+
+const uint8_t PIR = 2, LED_G = 8, LED_Y = 9, LED_R = 10;
+const unsigned long INTERVAL_MS = 5000;   // CHANGED: 5 s per reading (was 10 s) -> about 720 samples in 1 hour
+const unsigned long WARMUP_MS   = 30000;  // PIR settling time after power-up/reset
+unsigned long lastTick = 0;
+bool sawMotion = false;
+
+void setLeds(char c) {
+  digitalWrite(LED_G, c == 'G');
+  digitalWrite(LED_Y, c == 'Y');
+  digitalWrite(LED_R, c == 'R');
+}
+
+void setup() {
+  pinMode(PIR, INPUT);
+  pinMode(LED_G, OUTPUT);
+  pinMode(LED_Y, OUTPUT);
+  pinMode(LED_R, OUTPUT);
+  Serial.begin(9600);
+
+  // LED self-test: green, yellow, red
+  setLeds('G'); delay(500);
+  setLeds('Y'); delay(500);
+  setLeds('R'); delay(500);
+  setLeds('Y');                 // stays yellow until the laptop sends a prediction
+
+  delay(WARMUP_MS);             // discard PIR false triggers while it settles
+  lastTick = millis();
+  sawMotion = false;
+}
+
+void loop() {
+  if (digitalRead(PIR) == HIGH) sawMotion = true;   // latch any motion in this interval
+
+  if (millis() - lastTick >= INTERVAL_MS) {
+    lastTick += INTERVAL_MS;
+    Serial.println(sawMotion ? 1 : 0);              // report the state to the laptop
+    sawMotion = false;
+  }
+
+  if (Serial.available()) {                          // laptop replies G / Y / R
+    char c = Serial.read();
+    if (c == 'G' || c == 'Y' || c == 'R') setLeds(c);
+  }
+}
